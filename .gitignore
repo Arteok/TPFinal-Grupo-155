@@ -1,0 +1,16 @@
+# Archivos temporales de Office/Word
+~$*
+
+# Sistemas y editores
+Thumbs.db
+.DS_Store
+
+# Node.js
+node_modules/
+dist/
+
+# Java / Gradle
+build/
+.gradle/
+target/
+*.class
