@@ -16,56 +16,7 @@ facilitar la reserva de turnos por parte de los pacientes.
 
 ## Modelo UML
 
-### Clases y atributos
-
-**Profesional**
-- `id`: Long
-- `nombre`: String
-- `apellido`: String
-- `telefono`: String
-- Métodos: `inicializarAgenda(): void`, `configurarExcepcion(): void`
-
-**Agenda**
-- `id`: Long
-- `activo`: boolean
-- Métodos: `agregarConfiguracion(): void`, `agregarExcepcion(): void`
-
-**AgendaConfig**
-- `id`: Long
-- `diaSemana`: DayOfWeek
-- `horaInicio`: LocalTime
-- `horaFin`: LocalTime
-- `motivo`: String
-- Métodos: `validarHorario(): boolean`
-
-**ExcepcionAgenda**
-- `id`: Long
-- `fechaInicio`: LocalDate
-- `fechaFin`: LocalDate
-- `motivo`: String
-- Métodos: `estaBloqueado(LocalDateTime): boolean`
-
-**Turno**
-- `id`: Long
-- `fechaHoraInicio`: LocalDateTime
-- `fechaHoraFin`: LocalDateTime
-- `estado`: EstadoTurno
-- `pacienteNombre`: String
-- `pacienteTelefono`: String
-- Métodos: `confirmar(): void`, `verificarDisponibilidad(): boolean`
-
-**Enum EstadoTurno**
-- `PENDIENTE`
-- `CONFIRMADO`
-- `CANCELADO`
-
-### Relaciones
-
-- `Profesional (1) —◆ Agenda (1)`: composición. Un profesional tiene exactamente una agenda; la agenda no existe sin el profesional.
-- `Agenda (1) —◆ AgendaConfig (0..*)`: composición. Una agenda tiene cero o más configuraciones de horario.
-- `Agenda (1) —◆ ExcepcionAgenda (0..*)`: composición. Una agenda tiene cero o más excepciones.
-- `Agenda (1) — Turno (0..*)`: asociación. Una agenda tiene cero o más turnos.
-- `Turno ··→ EstadoTurno`: dependencia. El turno usa el enum para su estado.
+Clases, atributos, métodos, enums y relaciones en `UML.docx`.
 
 ## Base de datos
 
