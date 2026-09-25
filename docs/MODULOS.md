@@ -59,7 +59,10 @@ Permite administrar los datos básicos de los pacientes y los turnos registrados
 - Confirmación de turnos.
 - Cancelación de turnos.
 - Reprogramación de turnos.
-- Manejo de estados: `PENDIENTE`, `CONFIRMADO` y `CANCELADO`.
+- Registro de turnos realizados y de ausencias.
+- Manejo de estados: `PENDIENTE`, `CONFIRMADO`, `CANCELADO`, `REALIZADO` y `AUSENTE`.
+- Aplicar la matriz de transiciones: `PENDIENTE → CONFIRMADO, CANCELADO` y `CONFIRMADO → REALIZADO, AUSENTE, CANCELADO`. `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales.
+- Cierre automático de las reservas `PENDIENTE` que nunca se confirmaron, llamando a `fn_cerrar_turnos_vencidos()` desde una tarea programada.
 
 **Entidades relacionadas:** `Paciente`, `Turno`, `EstadoTurno`.
 
@@ -76,6 +79,7 @@ Agrupa las reglas necesarias para mantener una agenda consistente.
 - Verificar excepciones de agenda.
 - Calcular la hora de finalización del turno según la duración del servicio elegido.
 - Verificar que el turno completo entre dentro del horario disponible.
+- Validar la matriz de transiciones de estado antes de aplicar el cambio, para devolver un mensaje de negocio en lugar de depender de la excepción del trigger `trg_turno_transicion_estado`.
 
 **Entidades relacionadas:** `Turno`, `Servicio`, `Agenda`, `AgendaConfig`, `ExcepcionAgenda`.
 

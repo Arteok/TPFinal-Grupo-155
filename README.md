@@ -18,11 +18,14 @@ El flujo principal de reserva será:
 
 ## Modelo UML
 
-Diagrama y descripción del modelo en `docs/UML.docx` y `docs/UML.png`.
+Diagrama de clases en sintaxis Mermaid (se renderiza en GitHub) en [`docs/Diagrama_Clases_Actualizado_V2_Entrega.md`](docs/Diagrama_Clases_Actualizado_V2_Entrega.md), y su descripción en [`docs/### Modelo de Datos (UML).md`](docs/###%20Modelo%20de%20Datos%20%28UML%29.md).
 
 ## Base de datos
 
 Esquema relacional PostgreSQL en `database/schema.sql`.
+
+Diagrama entidad-relación en [`docs/DER_Actualizado.md`](docs/DER_Actualizado.md): incluye las siete
+entidades, las claves foráneas, los índices y las restricciones `CHECK` del script.
 
 El modelo incluye a `Paciente` como una entidad independiente. Los datos básicos del paciente (`nombre`, `apellido` y `telefono`) se almacenan una sola vez y cada `Turno` se relaciona mediante `paciente_id`. Esto permite consultar el historial de turnos y actualizar los datos de contacto sin repetirlos en cada reserva.
 
@@ -31,6 +34,24 @@ La existencia de `Paciente` **no implica crear una cuenta de usuario**: para res
 También se incorpora la entidad `Servicio`. Cada servicio pertenece al profesional y contiene nombre, descripción, duración y precio. Al reservar un turno, el paciente elige un servicio y el sistema calcula la hora de finalización según su duración.
 
 Las entidades que necesitan conservar historial se manejarán con baja lógica (`activo = false`) en lugar de eliminarse físicamente.
+
+### Última modificación
+
+`Paciente` y `Turno` registran `fecha_creacion`. Además, `Turno` tiene `fecha_actualizacion`, que se mantiene al día mediante el trigger `trg_turno_fecha_actualizacion` definido en `database/schema.sql`: un `DEFAULT CURRENT_TIMESTAMP` solo se aplica al insertar, por lo que sin el trigger la columna quedaría congelada con el valor de la creación en cada actualización.
+
+Esto es **última modificación, no auditoría**: la columna no registra quién cambió el turno ni qué cambió. Una auditoría real exigiría una tabla de historial, fuera del alcance del MVP.
+
+### Decisión de diseño: zonas horarias
+
+Un turno es un instante real en el calendario, por lo que `turno.fecha_hora_inicio`, `turno.fecha_hora_fin`, `turno.fecha_creacion`, `turno.fecha_actualizacion` y `paciente.fecha_creacion` se guardan como `TIMESTAMPTZ` (con zona horaria). El despliegue en Railway corre en UTC: guardar la hora sin zona haría que un turno de las 10:00 se mostrara corrido al cambiar de huso.
+
+En cambio, `agenda_config.hora_inicio` y `agenda_config.hora_fin` siguen siendo `TIME`, y `excepcion_agenda.fecha_inicio` y `excepcion_agenda.fecha_fin` siguen siendo `DATE`: describen un horario o un día local, no un instante, y no les corresponde zona horaria. En el backend se mapearán con `OffsetDateTime` (o `Instant`), no con `LocalDateTime`.
+
+## Documentación
+
+- [`docs/MODULOS.md`](docs/MODULOS.md) — definición de los seis módulos del MVP, entidades relacionadas por módulo y la tabla de aprobación del tutor y el comité.
+- [`docs/Trabajo Final IntegradorV2.docx`](docs/Trabajo%20Final%20IntegradorV2.docx) — propuesta de proyecto (versión vigente).
+- [`docs/Trabajo Final Integrador.docx`](docs/Trabajo%20Final%20Integrador.docx) — versión anterior de la propuesta, conservada como respaldo.
 
 ## Módulos a desarrollar (MVP)
 
@@ -54,6 +75,33 @@ Las entidades que necesitan conservar historial se manejarán con baja lógica (
 - `PENDIENTE`: reserva creada por el paciente y todavía no confirmada por la profesional.
 - `CONFIRMADO`: turno aceptado por la profesional.
 - `CANCELADO`: turno anulado y liberado para una nueva reserva.
+- `REALIZADO`: turno atendido y finalizado.
+- `AUSENTE`: el paciente no se presentó a la hora reservada.
+
+Solo `PENDIENTE` y `CONFIRMADO` ocupan el horario: los demás estados lo liberan.
+
+#### Transiciones permitidas
+
+| Desde | Hacia |
+| --- | --- |
+| `PENDIENTE` | `CONFIRMADO`, `CANCELADO` |
+| `CONFIRMADO` | `REALIZADO`, `AUSENTE`, `CANCELADO` |
+| `CANCELADO` | — (terminal) |
+| `REALIZADO` | — (terminal) |
+| `AUSENTE` | — (terminal) |
+
+La matriz se valida en la base de datos mediante el trigger `trg_turno_transicion_estado` (función `valida_turno_transicion_estado`), que rechaza cualquier cambio de estado no previsto con un error `check_violation`. Los servicios de aplicación deben validar la misma matriz antes de invocar la operación, para poder devolver un mensaje de negocio en lugar de una excepción de SQL.
+
+Dos decisiones explícitas:
+
+- **No se permite `CONFIRMADO → PENDIENTE`.** Desconfirmar un turno ya confirmado ensuciaría el historial del paciente, que es el registro que consulta para saber qué pasó con cada visita.
+- **Reprogramar** (cambiar `fecha_hora_inicio` y `fecha_hora_fin`) sí se permite mientras el turno esté en `PENDIENTE` o `CONFIRMADO`. No se admite sobre un estado terminal.
+
+### Regla de negocio: vencimiento de reservas sin confirmar
+
+Un turno `PENDIENTE` cuya hora de fin ya pasó se cierra automáticamente como `CANCELADO`. La operación la realiza la función `fn_cerrar_turnos_vencidos()`, que el backend invoca de forma periódica (`@Scheduled`) y que devuelve cuántos turnos cerró. El cierre deja constancia en `observaciones` sin pisar lo que ya hubiera, y la operación es idempotente.
+
+**Consecuencia asumida:** al cerrar al pasar la hora, un turno pasado ya no se puede confirmar. En el historial del paciente, un turno que nunca fue confirmado figura como `CANCELADO` y nunca como `AUSENTE`; `AUSENTE` queda reservado para los turnos que estaban `CONFIRMADO` y el paciente no se presentó.
 
 ### Regla de negocio: cancelación de turnos
 
@@ -74,7 +122,7 @@ Esta decisión agrega algo de trabajo al MVP porque requiere alta, búsqueda y a
 - Cuenta o inicio de sesión para pacientes.
 - Inicio de sesión con Google para pacientes.
 - Códigos de descuento.
-- Reserva de varios servicios en un mismo turno.
+- Reserva de varios servicios dentro de un mismo turno.
 - Múltiples consultorios o arquitectura multi-tenant.
 
 ### Aprobación de módulos
