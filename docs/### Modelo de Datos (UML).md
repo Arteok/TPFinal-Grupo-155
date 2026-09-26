@@ -1,17 +1,40 @@
 ### Modelo de Datos (UML)
 
-Como parte de la definición de la arquitectura del sistema, se completó la tarea de modelado de clases mediante el siguiente diagrama UML. El esquema detalla la estructura principal para gestionar la disponibilidad y las reservas del consultorio podológico:
+Como parte de la definición de la arquitectura del sistema, se completó la tarea de modelado de clases. El modelo representa la estructura principal necesaria para gestionar la disponibilidad, los servicios y las reservas del consultorio podológico.
 
-*   **Usuarios y Servicios:** Las entidades `Profesional` y `Paciente` estructuran los datos de contacto y acceso, mientras que `Servicio` define las prácticas ofrecidas, su duración y precio.
-*   **Configuración de Disponibilidad:** La entidad central `Agenda` administra los horarios habituales a través de `AgendaConfig` (días y franjas horarias) y gestiona los bloqueos temporales mediante `ExcepcionAgenda`.
-*   **Transaccionalidad:** La entidad `Turno` relaciona al paciente, la agenda y el servicio, controlando el ciclo de vida de la reserva mediante el enumerador `EstadoTurno` (PENDIENTE, CONFIRMADO, CANCELADO, REALIZADO, AUSENTE) y el seguimiento de los envíos de WhatsApp. Las transiciones están restringidas a la matriz `PENDIENTE → CONFIRMADO, CANCELADO` y `CONFIRMADO → REALIZADO, AUSENTE, CANCELADO`, con `CANCELADO`, `REALIZADO` y `AUSENTE` como estados terminales; la base de datos lo impone con el trigger `trg_turno_transicion_estado`. Registra además `fecha_creacion` y `fecha_actualizacion`, esta última mantenida por el trigger `trg_turno_fecha_actualizacion`. Las reservas `PENDIENTE` que nunca se confirman se cierran solas como `CANCELADO` al pasar la hora del turno, mediante `fn_cerrar_turnos_vencidos()`.
+* **Profesional, Paciente y Servicios:** `Profesional` representa al usuario que administra el sistema y contiene sus datos de acceso y contacto. `Paciente` representa a la persona que reserva un turno y almacena únicamente sus datos necesarios para la gestión de las reservas, sin cuenta ni inicio de sesión. `Servicio` define las prácticas ofrecidas por el profesional, incluyendo nombre, descripción, duración y precio.
 
-*   **Instantes y fechas locales:** los horarios de los turnos se guardan como `TIMESTAMPTZ` (`OffsetDateTime` en Java) porque son instantes reales y el despliegue corre en UTC. En cambio, las franjas de `AgendaConfig` (`TIME`, `LocalTime`) y las fechas de `ExcepcionAgenda` (`DATE`, `LocalDate`) describen un horario o un día local y se mantienen sin zona.
+* **Configuración de disponibilidad:** `Agenda` centraliza la disponibilidad del profesional. Los horarios habituales se configuran mediante `AgendaConfig`, que define días y franjas horarias, mientras que `ExcepcionAgenda` permite registrar períodos en los que la disponibilidad habitual debe modificarse o bloquearse.
 
-El diagrama de clases vigente está en
-[`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md), en sintaxis
-Mermaid: se renderiza al abrir el archivo en GitHub, o se puede pegar en <https://mermaid.live> para
-exportarlo como imagen. Incluye el enum `EstadoTurno` con cinco estados y las columnas de última
-modificación.
+* **Gestión de turnos:** `Turno` relaciona una agenda, un paciente y un servicio. Registra la fecha y hora de inicio, la fecha y hora de finalización, el estado de la reserva, observaciones y la información necesaria para el envío de recordatorios por WhatsApp.
 
-El diagrama entidad-relación de la base de datos está en [`DER_Actualizado.md`](DER_Actualizado.md).
+* **Estados del turno:** en el backend, el estado se representa mediante el enum `EstadoTurno`, con los valores `PENDIENTE`, `CONFIRMADO`, `CANCELADO`, `REALIZADO` y `AUSENTE`. En PostgreSQL se almacena como `VARCHAR` y se restringen los valores permitidos mediante un `CHECK`.
+
+  Las transiciones admitidas son:
+
+  - `PENDIENTE` → `CONFIRMADO`, `CANCELADO`
+  - `CONFIRMADO` → `REALIZADO`, `AUSENTE`, `CANCELADO`
+
+  Los estados `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales. La base de datos controla estas transiciones mediante el trigger `trg_turno_transicion_estado`.
+
+* **Duración del turno:** la hora de finalización se calcula en el backend a partir de `Servicio.duracionMinutos` y se almacena en `Turno.fechaHoraFin`.
+
+* **Seguimiento de modificaciones:** `Turno` registra `fechaCreacion` y `fechaActualizacion`. La columna de última modificación se actualiza mediante el trigger `trg_turno_fecha_actualizacion`.
+
+* **Cierre de reservas vencidas:** los turnos que permanecen en estado `PENDIENTE` luego de haber pasado su hora de finalización pueden ser cerrados automáticamente como `CANCELADO` mediante la función `fn_cerrar_turnos_vencidos()`.
+
+* **Recordatorios por WhatsApp:** `Turno` registra si el paciente aceptó recibir un recordatorio y si dicho recordatorio ya fue enviado.
+
+* **Instantes y fechas locales:** las fechas y horas de los turnos y las marcas de creación y actualización almacenadas como `TIMESTAMPTZ` se representan mediante `OffsetDateTime` en Java. Las franjas horarias de `AgendaConfig` utilizan `TIME` / `LocalTime`, mientras que las fechas de `ExcepcionAgenda` utilizan `DATE` / `LocalDate`, ya que representan horarios y fechas locales de atención.
+
+El diagrama de clases vigente se encuentra en
+[`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md).
+
+Está definido mediante sintaxis Mermaid y puede visualizarse directamente desde GitHub o mediante [Mermaid Live](https://mermaid.live).
+
+El diagrama entidad-relación correspondiente al esquema PostgreSQL se encuentra en
+[`DER_Actualizado.md`](DER_Actualizado.md).
+
+Ambos modelos se encuentran alineados con el esquema definido en:
+
+`database/schema.sql`

@@ -89,15 +89,19 @@ erDiagram
 
 * `PROFESIONAL` → `AGENDA`: exactamente una agenda por profesional. Lo garantiza el `UNIQUE` en
   `agenda.profesional_id`.
+
 * `PROFESIONAL` → `SERVICIO`: un profesional ofrece varios servicios.
+
 * `AGENDA` → `AGENDA_CONFIG` y `AGENDA` → `EXCEPCION_AGENDA`: composición. Un horario o una excepción
   sin agenda no tiene sentido, por eso `ON DELETE RESTRICT`. La configuración no referencia al
   profesional de forma directa: se llega a través de la agenda.
+
 * `PACIENTE` → `TURNO`, `SERVICIO` → `TURNO`, `AGENDA` → `TURNO`: un turno referencia exactamente un
   paciente, un servicio y una agenda. La baja del paciente, del servicio o de la agenda con turnos
   asociados está bloqueada por `ON DELETE RESTRICT`; la baja lógica se hace con `activo = false`.
-* La hora de fin del turno no se guarda calculada en la base: se deriva de
-  `servicio.duracion_minutos` en el backend.
+
+* La hora de finalización del turno se calcula en el backend a partir de
+  `servicio.duracion_minutos` y se almacena en `turno.fecha_hora_fin`.
 
 ## Restricciones que no se ven en el diagrama
 
