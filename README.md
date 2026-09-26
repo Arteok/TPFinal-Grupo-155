@@ -58,6 +58,7 @@ No forman parte de esta primera versión:
 
 ## Documentación
 
+- [`docs/INFORME_AVANCE.md`](docs/INFORME_AVANCE.md) — informe de avance de la 2.ª entrega: qué se entregó, avance por fase, riesgos y próximos pasos.
 - [`docs/MODULOS.md`](docs/MODULOS.md) — los seis módulos del MVP, las reglas de negocio del turno y la tabla de aprobación.
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — arquitectura por capas y decisiones del modelo de datos.
 - [`docs/Diagrama_Clases_Actualizado_V2_Entrega.md`](docs/Diagrama_Clases_Actualizado_V2_Entrega.md) — diagrama de clases.
