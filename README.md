@@ -65,6 +65,7 @@ No forman parte de esta primera versión:
 - [`docs/### Modelo de Datos (UML).md`](docs/###%20Modelo%20de%20Datos%20%28UML%29.md) — descripción del modelo de datos.
 - [`docs/DER_Actualizado.md`](docs/DER_Actualizado.md) — diagrama entidad-relación y restricciones del modelo.
 - Propuesta del proyecto: [versión vigente en Markdown](docs/Trabajo%20Final%20IntegradorV2.md) · [original en Word](docs/Trabajo%20Final%20IntegradorV2.docx)
+- [`docs/FLUJO_GIT.md`](docs/FLUJO_GIT.md) — estrategia de ramas, commits e integración utilizada por el equipo.
 
 ## Tecnologías
 
