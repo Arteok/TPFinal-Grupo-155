@@ -6,16 +6,19 @@
 
 ## ¿Qué entendemos por módulo?
 
-En este proyecto, un **módulo** es una parte funcional del sistema que agrupa tareas relacionadas y resuelve una necesidad concreta del usuario. Los módulos definidos a continuación corresponden al alcance del **MVP** y serán la base para organizar el desarrollo del frontend, backend y base de datos.
+En este proyecto, un **módulo** es una parte funcional del sistema que agrupa tareas relacionadas y resuelve una necesidad concreta del usuario.
+
+Los módulos definidos a continuación corresponden al alcance del **MVP** y serán la base para organizar el desarrollo del frontend, backend y base de datos.
 
 ---
 
 ## 1. Gestión de agenda y servicios
 
-Permite a la profesional administrar la configuración general de su atención.
+Permite al profesional administrar la configuración general de su atención y los servicios ofrecidos.
 
 **Incluye:**
-- Inicio de sesión de la profesional mediante email y contraseña.
+
+- Inicio de sesión del profesional mediante email y contraseña.
 - Configuración de días de atención.
 - Configuración de franjas horarias disponibles.
 - Registro de excepciones de agenda, por ejemplo días no laborables.
@@ -28,20 +31,24 @@ Permite a la profesional administrar la configuración general de su atención.
 
 ## 2. Reserva pública de turnos
 
-Permite al paciente reservar un turno sin necesidad de crear una cuenta ni validar su correo electrónico.
+Permite al paciente reservar un turno sin necesidad de crear una cuenta, iniciar sesión ni validar su correo electrónico.
 
 **Flujo principal:**
 
 **Servicio → fecha → horario → datos del paciente → confirmación del turno**
 
 **Incluye:**
+
 - Consulta de servicios disponibles.
 - Selección del servicio.
 - Consulta de fechas y horarios disponibles.
 - Ingreso de nombre, apellido y teléfono del paciente.
-- Registro de un `Paciente` nuevo o reutilización del registro existente cuando los datos ya están cargados, para no duplicar la persona.
+- Búsqueda de un paciente existente y reutilización de sus datos cuando corresponda.
+- Registro de un nuevo paciente cuando no exista uno previo.
 - Registro de la reserva.
 - Opción para aceptar recordatorios por WhatsApp.
+
+La identificación y posible reutilización de un paciente existente será responsabilidad de la lógica de aplicación. La base de datos no establece actualmente una restricción `UNIQUE` sobre el teléfono.
 
 **Entidades relacionadas:** `Servicio`, `Paciente`, `Turno`, `Agenda`.
 
@@ -49,21 +56,27 @@ Permite al paciente reservar un turno sin necesidad de crear una cuenta ni valid
 
 ## 3. Gestión de pacientes y turnos
 
-Permite administrar los datos básicos de los pacientes y los turnos registrados.
+Permite al profesional administrar los datos básicos de los pacientes y los turnos registrados.
 
 **Incluye:**
+
 - Alta de pacientes.
 - Consulta y modificación de nombre, apellido y teléfono.
 - Baja lógica del paciente cuando corresponda.
 - Consulta del historial de turnos de un paciente.
-- Consulta de turnos reservados.
+- Consulta de turnos registrados.
 - Confirmación de turnos.
 - Cancelación de turnos.
 - Reprogramación de turnos.
-- Registro de turnos realizados y de ausencias.
-- Los datos del paciente se guardan una sola vez en una entidad propia, lo que permite consultar su historial sin repetirlos en cada reserva.
+- Registro de turnos realizados.
+- Registro de ausencias.
+- Consulta del estado de cada turno.
 
-Los estados posibles, las transiciones permitidas, el vencimiento de las reservas sin confirmar y el criterio de cancelación están en [Reglas de negocio del turno](#reglas-de-negocio-del-turno).
+Los datos del paciente se almacenan en una entidad propia y cada turno mantiene una referencia al paciente correspondiente.
+
+El paciente **no posee usuario, contraseña ni inicio de sesión** dentro del MVP.
+
+Los estados posibles, las transiciones permitidas y el vencimiento de las reservas sin confirmar se detallan en [Reglas de negocio del turno](#reglas-de-negocio-del-turno).
 
 **Entidades relacionadas:** `Paciente`, `Turno`, `EstadoTurno`.
 
@@ -74,13 +87,18 @@ Los estados posibles, las transiciones permitidas, el vencimiento de las reserva
 Agrupa las reglas necesarias para mantener una agenda consistente.
 
 **Incluye:**
+
 - Evitar turnos duplicados.
 - Evitar solapamientos entre turnos pendientes o confirmados.
-- Verificar que el horario elegido se encuentre dentro de la disponibilidad de la agenda.
-- Verificar excepciones de agenda.
+- Verificar que el horario elegido se encuentre dentro de la disponibilidad configurada.
+- Verificar las excepciones de agenda.
 - Calcular la hora de finalización del turno según la duración del servicio elegido.
-- Verificar que el turno completo entre dentro del horario disponible.
-- Validar la matriz de transiciones de estado antes de aplicar el cambio, para devolver un mensaje de negocio en lugar de depender de la excepción del trigger `trg_turno_transicion_estado`.
+- Almacenar la hora de finalización calculada en `turno.fecha_hora_fin`.
+- Verificar que el turno completo entre dentro de la franja horaria disponible.
+- Validar las transiciones de estado antes de aplicar un cambio.
+- Validar que una reprogramación sólo se realice cuando el turno esté en un estado permitido.
+
+La base de datos también posee restricciones para reforzar parte de estas reglas. Los servicios del backend deberán validarlas previamente para devolver mensajes de negocio adecuados al usuario.
 
 **Entidades relacionadas:** `Turno`, `Servicio`, `Agenda`, `AgendaConfig`, `ExcepcionAgenda`.
 
@@ -88,14 +106,17 @@ Agrupa las reglas necesarias para mantener una agenda consistente.
 
 ## 5. Recordatorios por WhatsApp
 
-Permite gestionar los recordatorios de los turnos reservados.
+Permite gestionar recordatorios asociados a los turnos.
 
 **Incluye:**
+
 - Registrar si el paciente aceptó recibir recordatorios por WhatsApp.
-- Generar recordatorios de turnos próximos.
+- Identificar turnos próximos que requieran recordatorio.
 - Enviar el recordatorio mediante el servicio de mensajería que se defina.
 - Registrar si el recordatorio fue enviado.
-- Como contingencia, listar los recordatorios pendientes para que la profesional pueda enviarlos manualmente si la integración automática no resulta viable dentro del plazo académico.
+- Evitar envíos duplicados mediante el campo `recordatorio_enviado`.
+
+Como contingencia, el sistema podrá listar los recordatorios pendientes para que el profesional pueda enviarlos manualmente si la integración automática no resulta viable dentro del plazo académico.
 
 **Entidades relacionadas:** `Turno`, `Paciente`.
 
@@ -103,64 +124,144 @@ Permite gestionar los recordatorios de los turnos reservados.
 
 ## 6. Despliegue
 
-Permite publicar y ejecutar el sistema en servicios online.
+Comprende la publicación y ejecución del sistema en servicios online.
 
 **Incluye:**
+
 - Despliegue del frontend.
 - Despliegue del backend.
 - Despliegue o conexión de la base de datos PostgreSQL.
-- Configuración necesaria para comunicar frontend, backend y base de datos.
+- Configuración de variables de entorno.
+- Configuración de la comunicación entre frontend, backend y base de datos.
 
-**Tecnologías previstas:** Vercel para frontend y Railway para backend/PostgreSQL.
+**Tecnologías previstas:** Vercel para frontend y Railway para backend y PostgreSQL.
 
 ---
 
-## Reglas de negocio del turno
+# Reglas de negocio del turno
 
-### Estados
+## Estados
+
+En el backend, los estados se representan mediante el enum `EstadoTurno`.
+
+En PostgreSQL, el estado se almacena como `VARCHAR` y los valores permitidos se restringen mediante un `CHECK`.
 
 | Estado | Significado |
 | --- | --- |
-| `PENDIENTE` | Reserva creada por el paciente y todavía no confirmada por la profesional. |
-| `CONFIRMADO` | Turno aceptado por la profesional. |
-| `CANCELADO` | Turno anulado y liberado para una nueva reserva. |
+| `PENDIENTE` | Reserva creada y todavía no confirmada por el profesional. |
+| `CONFIRMADO` | Turno aceptado por el profesional. |
+| `CANCELADO` | Turno anulado. |
 | `REALIZADO` | Turno atendido y finalizado. |
-| `AUSENTE` | El paciente no se presentó a la hora reservada. |
+| `AUSENTE` | El paciente no se presentó a un turno previamente confirmado. |
 
-Solo `PENDIENTE` y `CONFIRMADO` ocupan el horario: los demás estados lo liberan.
+Los estados `PENDIENTE` y `CONFIRMADO` ocupan disponibilidad dentro de la agenda.
 
-### Transiciones permitidas
+Los estados `CANCELADO`, `REALIZADO` y `AUSENTE` no bloquean disponibilidad para futuras reservas.
+
+## Transiciones permitidas
 
 | Desde | Hacia |
 | --- | --- |
 | `PENDIENTE` | `CONFIRMADO`, `CANCELADO` |
 | `CONFIRMADO` | `REALIZADO`, `AUSENTE`, `CANCELADO` |
-| `CANCELADO` | — (terminal) |
-| `REALIZADO` | — (terminal) |
-| `AUSENTE` | — (terminal) |
+| `CANCELADO` | — |
+| `REALIZADO` | — |
+| `AUSENTE` | — |
 
-La matriz se valida en la base de datos mediante el trigger `trg_turno_transicion_estado` (función `valida_turno_transicion_estado`), que rechaza cualquier cambio de estado no previsto con un error `check_violation`. Los servicios de aplicación deben validar la misma matriz antes de invocar la operación, para poder devolver un mensaje de negocio en lugar de una excepción de SQL.
+Los estados `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales.
 
-Dos decisiones explícitas:
+La matriz se valida en la base de datos mediante el trigger `trg_turno_transicion_estado`, cuya función asociada es `valida_turno_transicion_estado()`.
 
-- **No se permite `CONFIRMADO → PENDIENTE`.** Desconfirmar un turno ya confirmado ensuciaría el historial del paciente, que es el registro que consulta para saber qué pasó con cada visita.
-- **Reprogramar** (cambiar `fecha_hora_inicio` y `fecha_hora_fin`) sí se permite mientras el turno esté en `PENDIENTE` o `CONFIRMADO`. No se admite sobre un estado terminal.
+El backend también deberá validar estas transiciones antes de ejecutar la modificación, para devolver un mensaje de negocio adecuado en lugar de depender únicamente de una excepción SQL.
 
-### Vencimiento de reservas sin confirmar
+### Decisiones sobre cambios de estado
 
-Un turno `PENDIENTE` cuya hora de fin ya pasó se cierra automáticamente como `CANCELADO`. La operación la realiza la función `fn_cerrar_turnos_vencidos()`, que el backend invoca de forma periódica (`@Scheduled`) y que devuelve cuántos turnos cerró. El cierre deja constancia en `observaciones` sin pisar lo que ya hubiera, y la operación es idempotente.
+- **No se permite `CONFIRMADO → PENDIENTE`.**
+- Un estado terminal no puede volver a abrirse.
+- La reprogramación sólo se permite cuando el turno está en estado `PENDIENTE` o `CONFIRMADO`.
 
-**Consecuencia asumida:** al cerrar al pasar la hora, un turno pasado ya no se puede confirmar. En el historial del paciente, un turno que nunca fue confirmado figura como `CANCELADO` y nunca como `AUSENTE`; `AUSENTE` queda reservado para los turnos que estaban `CONFIRMADO` y el paciente no se presentó.
+## Reprogramación
 
-### Cancelación de turnos
+Reprogramar un turno implica modificar:
 
-Se descarta el corrimiento automático de turnos ante una cancelación. Si el profesional necesita cubrir un turno liberado, lo gestiona manualmente contactando a otro paciente, ya que mover turnos automáticamente podría afectar la organización de los demás pacientes.
+- `fecha_hora_inicio`
+- `fecha_hora_fin`
 
-### Paciente como entidad independiente
+La nueva hora de finalización se calcula nuevamente a partir de `servicio.duracion_minutos`.
 
-`Paciente` forma parte del modelo UML y del esquema de base de datos. Se guardan sus datos básicos (`nombre`, `apellido`, `telefono`) en una tabla propia y los turnos se vinculan mediante una clave foránea.
+Antes de efectuar la modificación deberán volver a comprobarse:
 
-Esta decisión agrega algo de trabajo al MVP porque requiere alta, búsqueda y actualización de pacientes, pero evita repetir datos en cada turno y permite contar con un historial por paciente. El paciente no tendrá usuario ni contraseña en esta primera versión.
+- disponibilidad de agenda;
+- excepciones;
+- solapamientos;
+- duración completa del turno;
+- estado actual del turno.
+
+## Vencimiento de reservas sin confirmar
+
+Un turno `PENDIENTE` cuya hora de finalización ya pasó se cierra automáticamente como `CANCELADO`.
+
+La operación se encuentra implementada en la base mediante:
+
+`fn_cerrar_turnos_vencidos()`
+
+El backend podrá ejecutar esta función periódicamente mediante una tarea programada.
+
+La función:
+
+- busca turnos vencidos en estado `PENDIENTE`;
+- cambia su estado a `CANCELADO`;
+- deja constancia en `observaciones`;
+- conserva las observaciones existentes;
+- devuelve la cantidad de turnos cerrados.
+
+Una vez cancelado, el turno no vuelve a ser procesado por la función.
+
+**Consecuencia asumida:** un turno que nunca fue confirmado y cuya fecha ya pasó queda registrado como `CANCELADO`.
+
+El estado `AUSENTE` queda reservado para un turno que se encontraba previamente `CONFIRMADO` y al cual el paciente no se presentó.
+
+## Cancelación de turnos
+
+La cancelación de un turno libera su disponibilidad.
+
+No se realizará un corrimiento automático de otros turnos ante una cancelación.
+
+Si el profesional desea cubrir un horario liberado, deberá gestionarlo manualmente.
+
+Esta decisión evita modificar automáticamente turnos ya reservados por otros pacientes.
+
+## Paciente como entidad independiente
+
+`Paciente` forma parte del modelo UML y del esquema de base de datos.
+
+Se almacenan:
+
+- `nombre`
+- `apellido`
+- `telefono`
+- `activo`
+- `fecha_creacion`
+
+Cada turno referencia al paciente mediante una clave foránea.
+
+Esta estructura evita repetir los datos personales dentro de cada turno y permite consultar el historial asociado a un paciente.
+
+El paciente **no tendrá cuenta, usuario ni contraseña** dentro del MVP.
+
+## Cálculo de duración
+
+Cada `Servicio` define su duración mediante `duracion_minutos`.
+
+Cuando se crea o reprograma un turno, el backend calcula:
+
+`fecha_hora_fin = fecha_hora_inicio + duracion_minutos`
+
+El resultado se almacena en `turno.fecha_hora_fin`.
+
+Esto permite conocer directamente el intervalo ocupado y realizar las validaciones de disponibilidad y solapamiento.
+
+---
 
 ## Fuera del alcance del MVP
 
