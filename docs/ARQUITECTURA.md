@@ -12,20 +12,20 @@ El sistema utiliza una arquitectura web cliente-servidor compuesta por tres comp
 - **Backend:** API REST que concentra la lógica de negocio.
 - **Base de datos:** PostgreSQL para la persistencia de la información.
 
-El frontend no accede directamente a la base de datos. Toda operación se realiza mediante la API REST expuesta por el backend.
+El frontend no accede directamente a la base de datos. Todas las operaciones se realizan mediante la API REST expuesta por el backend.
 
 ```mermaid
 flowchart LR
     P[Paciente] --> F[Frontend]
     PR[Profesional] --> F
-
     F -->|API REST| B[Backend]
-    B --> D[(PostgreSQL)]
-
-    B -.->|Recordatorios| W[Servicio de mensajería WhatsApp]
+    B --> DB[(PostgreSQL)]
+    B -.->|Recordatorios| W[Servicio de mensajería]
 ```
 
-La integración con un servicio de mensajería para WhatsApp se considera externa al núcleo del sistema. Si la integración automática no resulta viable dentro del plazo académico, el sistema permitirá consultar los recordatorios pendientes para realizar el envío manualmente.
+La integración con WhatsApp se considera un servicio externo al sistema principal.
+
+Si la integración automática no resulta viable dentro del plazo del proyecto, se podrán consultar los recordatorios pendientes para realizar su envío manualmente.
 
 ---
 
@@ -37,10 +37,11 @@ Será responsable de:
 
 - exponer los endpoints de la API REST;
 - autenticar al profesional;
-- gestionar agenda, servicios, pacientes y turnos;
+- gestionar agenda y servicios;
+- gestionar pacientes y turnos;
 - calcular disponibilidad;
 - validar excepciones de agenda;
-- evitar superposiciones;
+- evitar turnos duplicados y solapamientos;
 - calcular la hora de finalización de los turnos;
 - controlar las transiciones de estado;
 - gestionar recordatorios;
@@ -52,13 +53,30 @@ El backend se organizará por capas para separar responsabilidades.
 
 | Capa | Responsabilidad |
 | --- | --- |
-| Controller | Expone los endpoints HTTP, recibe las solicitudes y devuelve las respuestas de la API. No contiene reglas de negocio. |
-| Service | Implementa la lógica de negocio: disponibilidad, solapamientos, cálculo de la hora de finalización, reprogramación y validación de estados. |
+| Controller | Recibe las solicitudes HTTP y devuelve las respuestas de la API. No contiene reglas de negocio. |
+| Service | Contiene las reglas de negocio y coordina las operaciones del sistema. |
 | Repository | Gestiona el acceso y las consultas a PostgreSQL. |
-| Domain | Contiene las entidades del dominio y el comportamiento asociado a ellas. |
-| DTO | Define los objetos utilizados para la entrada y salida de información de la API, evitando exponer directamente las entidades de persistencia. |
+| Domain | Contiene las entidades principales y su comportamiento. |
+| DTO | Define los objetos utilizados para la entrada y salida de datos de la API. |
 
-El backend validará las reglas de negocio antes de persistir los cambios. La base de datos mantendrá además restricciones propias para proteger la integridad de los datos.
+### Relación entre capas
+
+```mermaid
+flowchart TD
+    C[Controller] --> S[Service]
+    C --> DTO[DTO]
+    S --> D[Domain]
+    S --> R[Repository]
+    R --> DB[(PostgreSQL)]
+```
+
+La capa `Controller` recibe las solicitudes de la API y delega las operaciones en `Service`.
+
+`Service` contiene las reglas de negocio y utiliza las entidades del dominio y los repositorios necesarios para realizar las operaciones.
+
+`Repository` se encarga del acceso a PostgreSQL.
+
+Los `DTO` se utilizan para los datos de entrada y salida de la API, evitando exponer directamente las entidades internas del sistema.
 
 ---
 
@@ -79,6 +97,7 @@ El flujo principal será:
 El paciente podrá:
 
 - consultar los servicios disponibles;
+- seleccionar un servicio;
 - seleccionar una fecha;
 - consultar horarios disponibles;
 - ingresar nombre, apellido y teléfono;
@@ -91,9 +110,9 @@ Será utilizada por el profesional y requerirá autenticación.
 
 Permitirá:
 
-- gestionar los servicios;
-- configurar la agenda;
-- registrar excepciones de disponibilidad;
+- gestionar servicios;
+- configurar días y horarios de atención;
+- registrar excepciones de agenda;
 - consultar pacientes;
 - consultar el historial de turnos;
 - confirmar turnos;
@@ -119,11 +138,11 @@ Las principales entidades son:
 - `Paciente`
 - `Turno`
 
-El esquema relacional completo está definido en:
+El esquema relacional se encuentra definido en:
 
 [`database/schema.sql`](../database/schema.sql)
 
-El modelo se encuentra representado además en:
+También se encuentra representado mediante:
 
 - [`DER_Actualizado.md`](DER_Actualizado.md)
 - [`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md)
@@ -133,16 +152,16 @@ El modelo se encuentra representado además en:
 
 ## Reglas de negocio
 
-Las principales reglas se implementarán en la capa de servicios del backend y, cuando corresponda, estarán reforzadas mediante restricciones de PostgreSQL.
+Las principales reglas se implementarán en el backend y algunas estarán reforzadas mediante restricciones en PostgreSQL.
 
 Entre ellas se encuentran:
 
 - evitar turnos duplicados;
-- evitar solapamientos entre turnos activos;
+- evitar solapamientos entre turnos pendientes o confirmados;
 - respetar los horarios configurados en la agenda;
 - respetar las excepciones de agenda;
 - verificar que el turno completo entre dentro de la franja disponible;
-- calcular `fecha_hora_fin` a partir de la duración del servicio;
+- calcular la hora de finalización a partir de la duración del servicio;
 - permitir reprogramaciones únicamente para turnos `PENDIENTE` o `CONFIRMADO`;
 - controlar las transiciones permitidas entre estados.
 
@@ -159,7 +178,7 @@ Las transiciones permitidas son:
 - `PENDIENTE` → `CONFIRMADO`, `CANCELADO`
 - `CONFIRMADO` → `REALIZADO`, `AUSENTE`, `CANCELADO`
 
-`CANCELADO`, `REALIZADO` y `AUSENTE` son estados terminales.
+Los estados `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales.
 
 La base de datos refuerza estas reglas mediante el trigger `trg_turno_transicion_estado`.
 
@@ -167,11 +186,11 @@ La base de datos refuerza estas reglas mediante el trigger `trg_turno_transicion
 
 ## Manejo de fechas y horarios
 
-Los turnos representan instantes concretos, por lo que se almacenan utilizando `TIMESTAMPTZ`.
+Los turnos representan instantes concretos, por lo que sus fechas y horas se almacenan utilizando `TIMESTAMPTZ`.
 
 En Java se representarán mediante `OffsetDateTime`.
 
-Esto aplica a:
+Esto se aplica a:
 
 - `Turno.fechaHoraInicio`
 - `Turno.fechaHoraFin`
@@ -179,29 +198,27 @@ Esto aplica a:
 - `Turno.fechaActualizacion`
 - `Paciente.fechaCreacion`
 
-El backend se configurará para trabajar de forma consistente con UTC durante el despliegue.
-
 En cambio:
 
 - `AgendaConfig.horaInicio` y `AgendaConfig.horaFin` utilizan `LocalTime`;
 - `ExcepcionAgenda.fechaInicio` y `ExcepcionAgenda.fechaFin` utilizan `LocalDate`.
 
-Estas propiedades representan horarios y fechas locales de atención y no un instante global.
+Esto permite diferenciar los instantes reales de los horarios y fechas locales de atención.
 
 ---
 
 ## Recordatorios
 
-Cada turno almacena:
+Cada turno permite registrar:
 
-- `acepta_recordatorio_whatsapp`
-- `recordatorio_enviado`
+- si el paciente aceptó recibir un recordatorio por WhatsApp;
+- si el recordatorio ya fue enviado.
 
-El backend podrá identificar turnos próximos cuyos pacientes hayan aceptado recibir recordatorios.
+El backend podrá identificar los turnos próximos que necesiten un recordatorio.
 
-Cuando se implemente una integración automática, el backend será el responsable de comunicarse con el servicio externo de mensajería.
+Si se implementa una integración automática, el backend se comunicará con un servicio externo de mensajería.
 
-Como alternativa para el MVP, podrán mostrarse los recordatorios pendientes para permitir su envío manual.
+Como alternativa para el MVP, se podrán mostrar los recordatorios pendientes para realizar el envío manualmente.
 
 ---
 
@@ -215,7 +232,7 @@ La arquitectura prevista utiliza:
 | Backend | Railway |
 | Base de datos PostgreSQL | Railway |
 
-La comunicación entre los componentes será:
+La comunicación general será:
 
 ```text
 Paciente / Profesional
@@ -229,7 +246,7 @@ Paciente / Profesional
     PostgreSQL
 ```
 
-Las credenciales, conexiones y demás datos sensibles se configurarán mediante variables de entorno y no deberán almacenarse directamente en el repositorio.
+Las credenciales, conexiones y demás datos sensibles se configurarán mediante variables de entorno y no se almacenarán directamente en el repositorio.
 
 ---
 
@@ -244,16 +261,25 @@ Las credenciales, conexiones y demás datos sensibles se configurarán mediante 
 | Frontend hosting | Vercel |
 | Backend / PostgreSQL | Railway |
 
-La justificación de las tecnologías seleccionadas se encuentra desarrollada en la propuesta del proyecto:
+---
 
-[`Trabajo Final IntegradorV2.md`](Trabajo%20Final%20IntegradorV2.md)
+## Modelado
+
+Durante la etapa de diseño se utilizaron herramientas de apoyo para revisar y refinar el modelo del sistema.
+
+Los diagramas se mantienen en formato Mermaid, lo que permite modificarlos como texto y mantenerlos versionados dentro del repositorio.
+
+El proceso realizado se encuentra resumido en:
+
+[`MODELADO_CON_IA.md`](MODELADO_CON_IA.md)
 
 ---
 
 ## Documentación relacionada
 
-- [`MODULOS.md`](MODULOS.md) — módulos funcionales y reglas de negocio.
-- [`DER_Actualizado.md`](DER_Actualizado.md) — modelo entidad-relación.
+- [`MODULOS.md`](MODULOS.md) — módulos del MVP y reglas de negocio.
+- [`DER_Actualizado.md`](DER_Actualizado.md) — diagrama entidad-relación.
 - [`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md) — diagrama de clases.
-- [`### Modelo de Datos (UML).md`](###%20Modelo%20de%20Datos%20%28UML%29.md) — descripción del modelo de datos.
-- [`../database/schema.sql`](../database/schema.sql) — implementación del esquema PostgreSQL.
+- [`### Modelo de Datos (UML).md`](###%20Modelo%20de%20Datos%20%28UML%29.md) — descripción del modelo.
+- [`MODELADO_CON_IA.md`](MODELADO_CON_IA.md) — proceso de revisión y refinamiento del modelo.
+- [`../database/schema.sql`](../database/schema.sql) — esquema PostgreSQL.

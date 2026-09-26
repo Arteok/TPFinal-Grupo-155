@@ -1,124 +1,258 @@
-# TPFinal-Grupo-155
+# Arquitectura del sistema
 
-Trabajo Final Integrador — Grupo 155
+**Proyecto:** Sistema web de gestión de turnos para un consultorio podológico independiente  
+**Grupo:** 155 — Ludueña / Mariasch  
+**Tutor:** Sergio Andrés Antonini
 
-## Sistema de Gestión de Turnos
+## Arquitectura general
 
-Aplicación web para la gestión de turnos de un profesional independiente.
+El sistema utiliza una arquitectura web cliente-servidor compuesta por tres componentes principales:
 
-El sistema permite al profesional administrar su agenda y los servicios que ofrece, mientras que los pacientes pueden reservar un turno de forma sencilla, sin necesidad de crear una cuenta, iniciar sesión ni validar su correo electrónico.
+- **Frontend:** interfaz utilizada por el paciente y por el profesional.
+- **Backend:** API REST que concentra la lógica de negocio.
+- **Base de datos:** PostgreSQL para la persistencia de la información.
 
-El flujo principal de reserva es:
+El frontend no accede directamente a la base de datos. Todas las operaciones se realizan mediante la API REST expuesta por el backend.
+
+```mermaid
+flowchart LR
+    P[Paciente] --> F[Frontend]
+    PR[Profesional] --> F
+    F -->|API REST| B[Backend]
+    B --> DB[(PostgreSQL)]
+    B -.->|Recordatorios| W[Servicio de mensajería]
+```
+
+La integración con WhatsApp se considera un servicio externo al sistema principal.
+
+Si la integración automática no resulta viable dentro del plazo del proyecto, se podrán consultar los recordatorios pendientes para realizar su envío manualmente.
+
+---
+
+## Backend
+
+El backend se desarrollará con **Java, Spring Boot y Gradle**.
+
+Será responsable de:
+
+- exponer los endpoints de la API REST;
+- autenticar al profesional;
+- gestionar agenda y servicios;
+- gestionar pacientes y turnos;
+- calcular disponibilidad;
+- validar excepciones de agenda;
+- evitar turnos duplicados y solapamientos;
+- calcular la hora de finalización de los turnos;
+- controlar las transiciones de estado;
+- gestionar recordatorios;
+- acceder a PostgreSQL.
+
+### Capas del backend
+
+El backend se organizará por capas para separar responsabilidades.
+
+| Capa | Responsabilidad |
+| --- | --- |
+| Controller | Recibe las solicitudes HTTP y devuelve las respuestas de la API. No contiene reglas de negocio. |
+| Service | Contiene las reglas de negocio y coordina las operaciones del sistema. |
+| Repository | Gestiona el acceso y las consultas a PostgreSQL. |
+| Domain | Contiene las entidades principales y su comportamiento. |
+| DTO | Define los objetos utilizados para la entrada y salida de datos de la API. |
+
+### Relación entre capas
+
+```mermaid
+flowchart TD
+    C[Controller] --> S[Service]
+    C --> DTO[DTO]
+    S --> D[Domain]
+    S --> R[Repository]
+    R --> DB[(PostgreSQL)]
+```
+
+La capa `Controller` recibe las solicitudes de la API y delega las operaciones en `Service`.
+
+`Service` contiene las reglas de negocio y utiliza las entidades del dominio y los repositorios necesarios para realizar las operaciones.
+
+`Repository` se encarga del acceso a PostgreSQL.
+
+Los `DTO` se utilizan para los datos de entrada y salida de la API, evitando exponer directamente las entidades internas del sistema.
+
+---
+
+## Frontend
+
+El frontend se desarrollará con **React, TypeScript y Vite**.
+
+La interfaz tendrá dos áreas principales.
+
+### Reserva pública
+
+Permite al paciente reservar un turno sin necesidad de crear una cuenta, iniciar sesión o validar su correo electrónico.
+
+El flujo principal será:
 
 **Servicio → fecha → horario → datos del paciente → confirmación del turno**
 
+El paciente podrá:
+
+- consultar los servicios disponibles;
+- seleccionar un servicio;
+- seleccionar una fecha;
+- consultar horarios disponibles;
+- ingresar nombre, apellido y teléfono;
+- reservar un turno;
+- aceptar opcionalmente recordatorios por WhatsApp.
+
+### Administración
+
+Será utilizada por el profesional y requerirá autenticación.
+
+Permitirá:
+
+- gestionar servicios;
+- configurar días y horarios de atención;
+- registrar excepciones de agenda;
+- consultar pacientes;
+- consultar el historial de turnos;
+- confirmar turnos;
+- cancelar turnos;
+- reprogramar turnos;
+- registrar turnos realizados;
+- registrar ausencias;
+- consultar recordatorios pendientes.
+
 ---
 
-## Módulos del MVP
+## Base de datos
 
-1. **Gestión de agenda y servicios** — el profesional configura sus días y horarios de atención, excepciones de agenda y los servicios ofrecidos.
+La persistencia se realizará mediante **PostgreSQL**.
 
-2. **Reserva pública de turnos** — el paciente consulta servicios y disponibilidad, ingresa sus datos y realiza una reserva sin necesidad de crear una cuenta.
+Las principales entidades son:
 
-3. **Gestión de pacientes y turnos** — el profesional consulta y modifica datos básicos de pacientes, revisa su historial y administra los turnos registrados.
+- `Profesional`
+- `Agenda`
+- `AgendaConfig`
+- `ExcepcionAgenda`
+- `Servicio`
+- `Paciente`
+- `Turno`
 
-4. **Validaciones de negocio** — controla disponibilidad, excepciones, solapamientos, duración de los servicios y transiciones de estado.
+El esquema relacional se encuentra definido en:
 
-5. **Recordatorios por WhatsApp** — gestiona recordatorios para los pacientes que acepten recibirlos.
+[`database/schema.sql`](../database/schema.sql)
 
-6. **Despliegue** — publicación del frontend, backend y base de datos.
+También se encuentra representado mediante:
 
-El detalle completo de los módulos y sus reglas de negocio se encuentra en:
-
-[`docs/MODULOS.md`](docs/MODULOS.md)
+- [`DER_Actualizado.md`](DER_Actualizado.md)
+- [`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md)
+- [`### Modelo de Datos (UML).md`](###%20Modelo%20de%20Datos%20%28UML%29.md)
 
 ---
 
-## Estados de los turnos
+## Reglas de negocio
 
-| Estado | Significado |
-| --- | --- |
-| `PENDIENTE` | Reserva creada y todavía no confirmada por el profesional. |
-| `CONFIRMADO` | Turno aceptado por el profesional. |
-| `CANCELADO` | Turno anulado. |
-| `REALIZADO` | Turno atendido y finalizado. |
-| `AUSENTE` | El paciente no se presentó a un turno previamente confirmado. |
+Las principales reglas se implementarán en el backend y algunas estarán reforzadas mediante restricciones en PostgreSQL.
+
+Entre ellas se encuentran:
+
+- evitar turnos duplicados;
+- evitar solapamientos entre turnos pendientes o confirmados;
+- respetar los horarios configurados en la agenda;
+- respetar las excepciones de agenda;
+- verificar que el turno completo entre dentro de la franja disponible;
+- calcular la hora de finalización a partir de la duración del servicio;
+- permitir reprogramaciones únicamente para turnos `PENDIENTE` o `CONFIRMADO`;
+- controlar las transiciones permitidas entre estados.
+
+Los estados del turno son:
+
+- `PENDIENTE`
+- `CONFIRMADO`
+- `CANCELADO`
+- `REALIZADO`
+- `AUSENTE`
 
 Las transiciones permitidas son:
 
 - `PENDIENTE` → `CONFIRMADO`, `CANCELADO`
 - `CONFIRMADO` → `REALIZADO`, `AUSENTE`, `CANCELADO`
 
-`CANCELADO`, `REALIZADO` y `AUSENTE` son estados terminales.
+Los estados `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales.
 
-Los turnos `PENDIENTE` y `CONFIRMADO` ocupan disponibilidad dentro de la agenda.
-
----
-
-## Pacientes
-
-`Paciente` forma parte del modelo como una entidad independiente.
-
-Se almacenan sus datos básicos:
-
-- nombre;
-- apellido;
-- teléfono;
-- estado activo;
-- fecha de creación.
-
-Cada turno se vincula con un paciente.
-
-El paciente **no posee cuenta, usuario ni contraseña** dentro del MVP.
+La base de datos refuerza estas reglas mediante el trigger `trg_turno_transicion_estado`.
 
 ---
 
-## Fuera del alcance del MVP
+## Manejo de fechas y horarios
 
-No forman parte de esta primera versión:
+Los turnos representan instantes concretos, por lo que sus fechas y horas se almacenan utilizando `TIMESTAMPTZ`.
 
-- Pasarelas de pago online.
-- Facturación electrónica.
-- Historia clínica integral o almacenamiento de información clínica compleja.
-- Aplicaciones móviles nativas.
-- Cuenta o inicio de sesión para pacientes.
-- Inicio de sesión con Google para pacientes.
-- Códigos de descuento.
-- Reserva de varios servicios dentro de un mismo turno.
-- Modelo comercial de suscripciones para múltiples consultorios.
-- Arquitectura multi-tenant o gestión de múltiples organizaciones.
+En Java se representarán mediante `OffsetDateTime`.
+
+Esto se aplica a:
+
+- `Turno.fechaHoraInicio`
+- `Turno.fechaHoraFin`
+- `Turno.fechaCreacion`
+- `Turno.fechaActualizacion`
+- `Paciente.fechaCreacion`
+
+En cambio:
+
+- `AgendaConfig.horaInicio` y `AgendaConfig.horaFin` utilizan `LocalTime`;
+- `ExcepcionAgenda.fechaInicio` y `ExcepcionAgenda.fechaFin` utilizan `LocalDate`.
+
+Esto permite diferenciar los instantes reales de los horarios y fechas locales de atención.
 
 ---
 
-## Estructura del proyecto
+## Recordatorios
 
-| Carpeta | Contenido |
+Cada turno permite registrar:
+
+- si el paciente aceptó recibir un recordatorio por WhatsApp;
+- si el recordatorio ya fue enviado.
+
+El backend podrá identificar los turnos próximos que necesiten un recordatorio.
+
+Si se implementa una integración automática, el backend se comunicará con un servicio externo de mensajería.
+
+Como alternativa para el MVP, se podrán mostrar los recordatorios pendientes para realizar el envío manualmente.
+
+---
+
+## Despliegue
+
+La arquitectura prevista utiliza:
+
+| Componente | Plataforma |
 | --- | --- |
-| `docs/` | Propuesta, UML, DER, módulos, arquitectura e informes. |
-| `database/` | Esquema relacional PostgreSQL definido en `schema.sql`. |
-| `backend/` | API REST del sistema. |
-| `frontend/` | Interfaz web del sistema. |
+| Frontend | Vercel |
+| Backend | Railway |
+| Base de datos PostgreSQL | Railway |
 
----
+La comunicación general será:
 
-## Documentación
+```text
+Paciente / Profesional
+        ↓
+     Frontend
+        ↓
+     API REST
+        ↓
+      Backend
+        ↓
+    PostgreSQL
+```
 
-- [`docs/INFORME_AVANCE.md`](docs/INFORME_AVANCE.md) — estado de la segunda entrega, riesgos y próximos pasos.
-- [`docs/MODULOS.md`](docs/MODULOS.md) — módulos del MVP y reglas de negocio.
-- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — arquitectura general del sistema.
-- [`docs/FLUJO_GIT.md`](docs/FLUJO_GIT.md) — estrategia de ramas, commits e integración utilizada por el equipo.
-- [`docs/Diagrama_Clases_Actualizado_V2_Entrega.md`](docs/Diagrama_Clases_Actualizado_V2_Entrega.md) — diagrama de clases UML.
-- [`docs/### Modelo de Datos (UML).md`](docs/###%20Modelo%20de%20Datos%20%28UML%29.md) — descripción del modelo de datos.
-- [`docs/DER_Actualizado.md`](docs/DER_Actualizado.md) — diagrama entidad-relación.
-- [`database/schema.sql`](database/schema.sql) — implementación del esquema PostgreSQL.
-- Propuesta del proyecto: [`docs/Trabajo Final IntegradorV2.md`](docs/Trabajo%20Final%20IntegradorV2.md)
-- Documento original: [`docs/Trabajo Final IntegradorV2.docx`](docs/Trabajo%20Final%20IntegradorV2.docx)
+Las credenciales, conexiones y demás datos sensibles se configurarán mediante variables de entorno y no se almacenarán directamente en el repositorio.
 
 ---
 
 ## Tecnologías
 
-| Componente | Tecnologías |
+| Componente | Tecnología |
 | --- | --- |
 | Backend | Java · Spring Boot · Gradle |
 | Frontend | React · TypeScript · Vite |
@@ -129,44 +263,23 @@ No forman parte de esta primera versión:
 
 ---
 
-## Control de versiones
+## Modelado
 
-El proyecto utiliza Git y GitHub.
+Durante la etapa de diseño se utilizaron herramientas de apoyo para revisar y refinar el modelo del sistema.
 
-La rama `main` contiene la versión estable del proyecto.
+Los diagramas se mantienen en formato Mermaid, lo que permite modificarlos como texto y mantenerlos versionados dentro del repositorio.
 
-Las modificaciones se realizan mediante ramas independientes según la tarea o funcionalidad.
+El proceso realizado se encuentra resumido en:
 
-Para la documentación de esta entrega se utiliza:
-
-`docs/segunda-entrega`
-
-El flujo de trabajo completo se encuentra documentado en:
-
-[`docs/FLUJO_GIT.md`](docs/FLUJO_GIT.md)
+[`MODELADO_CON_IA.md`](MODELADO_CON_IA.md)
 
 ---
 
-## Integrantes
+## Documentación relacionada
 
-- Pablo Mariasch
-- Bruno Ludueña
-
----
-
-## Estado actual
-
-El proyecto se encuentra en la etapa de **diseño y modelado correspondiente a la segunda entrega**.
-
-Actualmente se encuentran definidos:
-
-- propuesta del proyecto;
-- módulos del MVP;
-- arquitectura;
-- diagrama de clases;
-- diagrama entidad-relación;
-- esquema PostgreSQL;
-- reglas principales de negocio;
-- flujo de trabajo con Git.
-
-El desarrollo funcional del backend y frontend comenzará luego de cerrar las validaciones y aprobaciones correspondientes.
+- [`MODULOS.md`](MODULOS.md) — módulos del MVP y reglas de negocio.
+- [`DER_Actualizado.md`](DER_Actualizado.md) — diagrama entidad-relación.
+- [`Diagrama_Clases_Actualizado_V2_Entrega.md`](Diagrama_Clases_Actualizado_V2_Entrega.md) — diagrama de clases.
+- [`### Modelo de Datos (UML).md`](###%20Modelo%20de%20Datos%20%28UML%29.md) — descripción del modelo.
+- [`MODELADO_CON_IA.md`](MODELADO_CON_IA.md) — proceso de revisión y refinamiento del modelo.
+- [`../database/schema.sql`](../database/schema.sql) — esquema PostgreSQL.
