@@ -39,6 +39,7 @@ Permite al paciente reservar un turno sin necesidad de crear una cuenta ni valid
 - Selección del servicio.
 - Consulta de fechas y horarios disponibles.
 - Ingreso de nombre, apellido y teléfono del paciente.
+- Registro de un `Paciente` nuevo o reutilización del registro existente cuando los datos ya están cargados, para no duplicar la persona.
 - Registro de la reserva.
 - Opción para aceptar recordatorios por WhatsApp.
 
@@ -60,9 +61,9 @@ Permite administrar los datos básicos de los pacientes y los turnos registrados
 - Cancelación de turnos.
 - Reprogramación de turnos.
 - Registro de turnos realizados y de ausencias.
-- Manejo de estados: `PENDIENTE`, `CONFIRMADO`, `CANCELADO`, `REALIZADO` y `AUSENTE`.
-- Aplicar la matriz de transiciones: `PENDIENTE → CONFIRMADO, CANCELADO` y `CONFIRMADO → REALIZADO, AUSENTE, CANCELADO`. `CANCELADO`, `REALIZADO` y `AUSENTE` son terminales.
-- Cierre automático de las reservas `PENDIENTE` que nunca se confirmaron, llamando a `fn_cerrar_turnos_vencidos()` desde una tarea programada.
+- Los datos del paciente se guardan una sola vez en una entidad propia, lo que permite consultar su historial sin repetirlos en cada reserva.
+
+Los estados posibles, las transiciones permitidas, el vencimiento de las reservas sin confirmar y el criterio de cancelación están en [Reglas de negocio del turno](#reglas-de-negocio-del-turno).
 
 **Entidades relacionadas:** `Paciente`, `Turno`, `EstadoTurno`.
 
@@ -114,19 +115,56 @@ Permite publicar y ejecutar el sistema en servicios online.
 
 ---
 
+## Reglas de negocio del turno
+
+### Estados
+
+| Estado | Significado |
+| --- | --- |
+| `PENDIENTE` | Reserva creada por el paciente y todavía no confirmada por la profesional. |
+| `CONFIRMADO` | Turno aceptado por la profesional. |
+| `CANCELADO` | Turno anulado y liberado para una nueva reserva. |
+| `REALIZADO` | Turno atendido y finalizado. |
+| `AUSENTE` | El paciente no se presentó a la hora reservada. |
+
+Solo `PENDIENTE` y `CONFIRMADO` ocupan el horario: los demás estados lo liberan.
+
+### Transiciones permitidas
+
+| Desde | Hacia |
+| --- | --- |
+| `PENDIENTE` | `CONFIRMADO`, `CANCELADO` |
+| `CONFIRMADO` | `REALIZADO`, `AUSENTE`, `CANCELADO` |
+| `CANCELADO` | — (terminal) |
+| `REALIZADO` | — (terminal) |
+| `AUSENTE` | — (terminal) |
+
+La matriz se valida en la base de datos mediante el trigger `trg_turno_transicion_estado` (función `valida_turno_transicion_estado`), que rechaza cualquier cambio de estado no previsto con un error `check_violation`. Los servicios de aplicación deben validar la misma matriz antes de invocar la operación, para poder devolver un mensaje de negocio en lugar de una excepción de SQL.
+
+Dos decisiones explícitas:
+
+- **No se permite `CONFIRMADO → PENDIENTE`.** Desconfirmar un turno ya confirmado ensuciaría el historial del paciente, que es el registro que consulta para saber qué pasó con cada visita.
+- **Reprogramar** (cambiar `fecha_hora_inicio` y `fecha_hora_fin`) sí se permite mientras el turno esté en `PENDIENTE` o `CONFIRMADO`. No se admite sobre un estado terminal.
+
+### Vencimiento de reservas sin confirmar
+
+Un turno `PENDIENTE` cuya hora de fin ya pasó se cierra automáticamente como `CANCELADO`. La operación la realiza la función `fn_cerrar_turnos_vencidos()`, que el backend invoca de forma periódica (`@Scheduled`) y que devuelve cuántos turnos cerró. El cierre deja constancia en `observaciones` sin pisar lo que ya hubiera, y la operación es idempotente.
+
+**Consecuencia asumida:** al cerrar al pasar la hora, un turno pasado ya no se puede confirmar. En el historial del paciente, un turno que nunca fue confirmado figura como `CANCELADO` y nunca como `AUSENTE`; `AUSENTE` queda reservado para los turnos que estaban `CONFIRMADO` y el paciente no se presentó.
+
+### Cancelación de turnos
+
+Se descarta el corrimiento automático de turnos ante una cancelación. Si el profesional necesita cubrir un turno liberado, lo gestiona manualmente contactando a otro paciente, ya que mover turnos automáticamente podría afectar la organización de los demás pacientes.
+
+### Paciente como entidad independiente
+
+`Paciente` forma parte del modelo UML y del esquema de base de datos. Se guardan sus datos básicos (`nombre`, `apellido`, `telefono`) en una tabla propia y los turnos se vinculan mediante una clave foránea.
+
+Esta decisión agrega algo de trabajo al MVP porque requiere alta, búsqueda y actualización de pacientes, pero evita repetir datos en cada turno y permite contar con un historial por paciente. El paciente no tendrá usuario ni contraseña en esta primera versión.
+
 ## Fuera del alcance del MVP
 
-En esta primera versión no se desarrollarán:
-
-- Pasarelas de pago online.
-- Facturación electrónica.
-- Historia clínica integral.
-- Aplicaciones móviles nativas.
-- Cuenta o inicio de sesión para pacientes.
-- Inicio de sesión con Google para pacientes.
-- Códigos de descuento.
-- Reserva de varios servicios dentro de un mismo turno.
-- Múltiples consultorios o arquitectura multi-tenant.
+Lo que no se desarrolla en esta primera versión está detallado en el [README](../README.md#fuera-del-alcance-del-mvp).
 
 ---
 
